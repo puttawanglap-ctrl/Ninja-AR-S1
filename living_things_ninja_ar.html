@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>นินจาวิทย์ พิชิตสิ่งมีชีวิต AR</title>
+    <!-- Import cute Thai fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Mali:wght@400;600;700&family=Kanit:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- MediaPipe Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        :root {
+            /* Cute & Vibrant Palette */
+            --sky-blue: #87CEEB;
+            --grass-green: #7CFC00;
+            --leaf-green: #32CD32;
+            --sun-yellow: #FFD700;
+            --wood-brown: #8B4513;
+            --soft-pink: #FFB6C1;
+            --alert-red: #FF6347;
+            --cloud-white: #FFFFFF;
+            
+            --panel-bg: rgba(255, 255, 255, 0.85);
+            --text-dark: #333333;
+            --text-outline: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--sky-blue);
+            font-family: 'Kanit', sans-serif;
+            touch-action: none;
+            user-select: none;
+            color: var(--text-dark);
+        }
+
+        /* Beautiful Nature Background with CSS */
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(to bottom, #87CEEB 0%, #E0F6FF 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* CSS Clouds */
+        .cloud {
+            position: absolute;
+            background: #fff;
+            border-radius: 50px;
+            opacity: 0.8;
+            animation: float-cloud linear infinite;
+            z-index: 1;
+        }
+        .cloud::before, .cloud::after {
+            content: '';
+            position: absolute;
+            background: #fff;
+            border-radius: 50%;
+        }
+        .cloud1 { width: 150px; height: 50px; top: 10%; left: -200px; animation-duration: 35s; }
+        .cloud1::before { width: 70px; height: 70px; top: -35px; left: 20px; }
+        .cloud1::after { width: 50px; height: 50px; top: -25px; left: 80px; }
+        
+        .cloud2 { width: 200px; height: 60px; top: 25%; left: -300px; animation-duration: 45s; animation-delay: 5s; transform: scale(0.8); opacity: 0.6; }
+        .cloud2::before { width: 80px; height: 80px; top: -40px; left: 30px; }
+        .cloud2::after { width: 70px; height: 70px; top: -30px; left: 100px; }
+
+        @keyframes float-cloud {
+            from { transform: translateX(-200px); }
+            to { transform: translateX(110vw); }
+        }
+
+        /* CSS Sun */
+        .sun {
+            position: absolute;
+            top: 5%;
+            right: 10%;
+            width: 100px;
+            height: 100px;
+            background: var(--sun-yellow);
+            border-radius: 50%;
+            box-shadow: 0 0 40px var(--sun-yellow), 0 0 80px #FFA500;
+            z-index: 1;
+            animation: pulse-sun 4s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulse-sun {
+            from { transform: scale(1); }
+            to { transform: scale(1.1); box-shadow: 0 0 60px var(--sun-yellow), 0 0 100px #FFA500; }
+        }
+
+        /* Video element for webcam, hidden visually but used for processing */
+        #webcam {
+            display: none;
+        }
+
+        /* Video Feed Canvas - Shows user behind the cute UI */
+        #video-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror */
+            opacity: 0.6; /* Blend with nature background */
+            mix-blend-mode: overlay;
+        }
+
+        /* Main Game Canvas - Objects and effects */
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            transform: scaleX(-1);
+        }
+        
+        /* UI Canvas overlay - Floating text, UI particles */
+        #ui-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(135, 206, 235, 0.4);
+            backdrop-filter: blur(10px);
+            z-index: 30;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transform: scale(1.1);
+        }
+
+        .overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1);
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border: 6px solid #FFF;
+            border-radius: 40px;
+            padding: 2.5rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15), inset 0 5px 15px rgba(255,255,255,1);
+            max-width: 800px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            text-align: center;
+        }
+
+        /* Bubbly Buttons */
+        .btn {
+            background: linear-gradient(180deg, #6EE7B7 0%, #10B981 100%);
+            border: 4px solid #FFF;
+            color: white;
+            padding: 15px 30px;
+            font-size: 1.5rem;
+            font-weight: 800;
+            font-family: 'Kanit', sans-serif;
+            border-radius: 50px;
+            cursor: pointer;
+            text-shadow: 1px 2px 2px rgba(0,0,0,0.2);
+            box-shadow: 0 8px 0 #059669, 0 15px 20px rgba(0,0,0,0.2);
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            text-transform: uppercase;
+        }
+
+        .btn:hover {
+            transform: translateY(2px);
+            box-shadow: 0 6px 0 #059669, 0 10px 15px rgba(0,0,0,0.2);
+            filter: brightness(1.1);
+        }
+
+        .btn:active {
+            transform: translateY(8px);
+            box-shadow: 0 0px 0 #059669, 0 5px 5px rgba(0,0,0,0.2);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(180deg, #93C5FD 0%, #3B82F6 100%);
+            box-shadow: 0 8px 0 #2563EB, 0 15px 20px rgba(0,0,0,0.2);
+        }
+        .btn-secondary:hover { box-shadow: 0 6px 0 #2563EB, 0 10px 15px rgba(0,0,0,0.2); }
+        .btn-secondary:active { box-shadow: 0 0px 0 #2563EB, 0 5px 5px rgba(0,0,0,0.2); }
+        
+        .btn-danger {
+            background: linear-gradient(180deg, #FCA5A5 0%, #EF4444 100%);
+            box-shadow: 0 8px 0 #DC2626, 0 15px 20px rgba(0,0,0,0.2);
+        }
+        .btn-danger:hover { box-shadow: 0 6px 0 #DC2626, 0 10px 15px rgba(0,0,0,0.2); }
+        .btn-danger:active { box-shadow: 0 0px 0 #DC2626, 0 5px 5px rgba(0,0,0,0.2); }
+
+        .btn:disabled {
+            background: #D1D5DB;
+            box-shadow: 0 8px 0 #9CA3AF;
+            cursor: not-allowed;
+            transform: none;
+            filter: grayscale(1);
+        }
+
+        .game-title {
+            font-family: 'Mali', cursive;
+            font-size: 4.5rem;
+            font-weight: 700;
+            color: #FF7F50;
+            text-shadow: 3px 3px 0 #FFF, -3px -3px 0 #FFF, 3px -3px 0 #FFF, -3px 3px 0 #FFF, 5px 5px 15px rgba(0,0,0,0.2);
+            line-height: 1.2;
+            margin-bottom: 1rem;
+            animation: bounce-title 2s infinite ease-in-out;
+        }
+
+        .game-subtitle {
+            font-size: 1.8rem;
+            color: #4B5563;
+            font-weight: 600;
+            background: #FFF;
+            display: inline-block;
+            padding: 5px 20px;
+            border-radius: 30px;
+            border: 3px dashed #FCD34D;
+            margin-bottom: 2rem;
+            box-shadow: 0 5px 10px rgba(0,0,0,0.05);
+        }
+
+        @keyframes bounce-title {
+            0%, 100% { transform: scale(1) rotate(-2deg); }
+            50% { transform: scale(1.05) rotate(2deg); }
+        }
+
+        /* Mode Selection Grid */
+        .mode-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .mode-card {
+            background: #FFF;
+            border: 4px solid #E5E7EB;
+            border-radius: 20px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .mode-card:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+
+        .mode-card.selected {
+            border-color: #10B981;
+            background: #ECFDF5;
+            transform: scale(1.05);
+            box-shadow: 0 10px 20px rgba(16, 185, 129, 0.2);
+        }
+        
+        .mode-card.selected::after {
+            content: '✓';
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            color: #10B981;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        /* Cute HUD */
+        .hud-element {
+            position: absolute;
+            z-index: 25;
+            pointer-events: none;
+            font-family: 'Kanit', sans-serif;
+            font-weight: 800;
+            text-shadow: 2px 2px 0 #FFF, -2px -2px 0 #FFF, 2px -2px 0 #FFF, -2px 2px 0 #FFF, 3px 3px 5px rgba(0,0,0,0.3);
+        }
+        
+        #hud-top-bar {
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            justify-content: space-between;
+            width: 95%;
+            max-width: 1200px;
+        }
+
+        .hud-box {
+            background: rgba(255,255,255,0.8);
+            border: 4px solid #FCD34D;
+            border-radius: 30px;
+            padding: 10px 25px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+        }
+
+        .hud-label { color: #6B7280; font-size: 1.2rem; font-weight: 600; text-transform: uppercase;}
+        .hud-value { font-size: 2.5rem; color: #10B981; line-height: 1;}
+        
+        #hud-lives { display: flex; gap: 8px; font-size: 2rem; }
+        .heart { display: inline-block; animation: beat 1s infinite alternate; filter: drop-shadow(0 4px 4px rgba(0,0,0,0.2)); }
+        @keyframes beat { to { transform: scale(1.2); } }
+
+        #hud-objective { 
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 2.2rem; 
+            background: #FFF; 
+            padding: 15px 40px; 
+            border-radius: 50px; 
+            border: 5px solid #8B5CF6; 
+            color: #8B5CF6;
+            box-shadow: 0 10px 20px rgba(139, 92, 246, 0.3);
+            text-align: center;
+        }
+
+        #hud-combo { 
+            position: absolute;
+            top: 100px;
+            left: 5%;
+            font-size: 3rem; 
+            color: #F59E0B; 
+            opacity: 0; 
+            transform: rotate(-10deg) scale(0.5);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+        }
+        #hud-combo.active { opacity: 1; transform: rotate(-5deg) scale(1.2); }
+        
+        /* Loading Spinner Cute */
+        .loader {
+            border: 8px solid #F3F4F6;
+            border-top: 8px solid #10B981;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 12px; }
+        ::-webkit-scrollbar-track { background: #F3F4F6; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: #9CA3AF; border-radius: 10px; border: 3px solid #F3F4F6; }
+        ::-webkit-scrollbar-thumb:hover { background: #6B7280; }
+
+        /* Result Screen Cards */
+        .stat-card {
+            background: #FFF;
+            border: 3px solid #E5E7EB;
+            border-radius: 20px;
+            padding: 15px;
+            box-shadow: 0 5px 10px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .stat-card .label { color: #9CA3AF; font-size: 1rem; font-weight: 600; margin-bottom: 5px;}
+        .stat-card .value { font-size: 2rem; color: #4B5563; font-weight: 800;}
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- Background Elements -->
+        <div class="sun"></div>
+        <div class="cloud cloud1"></div>
+        <div class="cloud cloud2"></div>
+
+        <!-- Video element for webcam to feed MediaPipe -->
+        <video id="webcam" autoplay playsinline></video>
+        
+        <!-- Canvas to draw the webcam feed with cute tint -->
+        <canvas id="video-canvas"></canvas>
+        
+        <!-- Game World Canvas (Flipped for Mirror) -->
+        <canvas id="game-canvas"></canvas>
+        
+        <!-- UI Overlay Canvas (Not flipped) -->
+        <canvas id="ui-canvas"></canvas>
+
+        <!-- Heads Up Display -->
+        <div id="hud-top-bar" class="hud-element" style="display:none;">
+            <div class="hud-box">
+                <span class="hud-label">คะแนน</span>
+                <span id="score-val" class="hud-value text-blue-500">0</span>
+            </div>
+            <div class="hud-box">
+                <span id="hud-lives">
+                    <span class="heart">❤️</span><span class="heart">❤️</span><span class="heart">❤️</span>
+                </span>
+            </div>
+        </div>
+        
+        <div id="hud-combo" class="hud-element">คอมโบ<br>x<span id="combo-val">1</span>!</div>
+        <div id="hud-objective" class="hud-element" style="display:none;">
+            🎯 ภารกิจ: <span id="obj-text" class="text-pink-500">สิ่งมีชีวิต</span>
+        </div>
+
+        <!-- Main Menu Overlay -->
+        <div id="menu-overlay" class="overlay active">
+            <div class="panel">
+                <div class="game-title">นินจาวิทย์<br>พิชิตสิ่งมีชีวิต AR</div>
+                <div class="game-subtitle">"ฟันให้ถูก พิชิตโลกวิทยาศาสตร์"</div>
+                
+                <div class="w-full text-center mb-8 bg-blue-50 p-4 rounded-2xl border-2 border-blue-200">
+                    <p class="text-xl text-blue-800 mb-2 font-bold">✨ ใช้มือของคุณเป็นดาบนินจาวิเศษ! ✨</p>
+                    <p class="text-md text-gray-500">เพื่อนๆ จำเป็นต้องเปิดกล้องเพื่อเล่นเกมนี้ด้วยนะจ๊ะ</p>
+                </div>
+
+                <div class="flex flex-col md:flex-row gap-6 justify-center items-center mb-6">
+                    <button id="btn-quick-play" class="btn text-2xl px-10 py-5" disabled>
+                        <span id="btn-play-text">กำลังเตรียมพลังนินจา...</span>
+                    </button>
+                    <button id="btn-teacher-mode" class="btn btn-secondary text-xl">👩‍🏫 โหมดคุณครู</button>
+                </div>
+                
+                <div id="loading-container" class="mt-4 flex flex-col items-center">
+                    <div class="loader mb-2"></div>
+                    <div id="loading-status" class="text-lg text-gray-500 font-bold">กำลังโหลดระบบตรวจจับมือวิเศษ...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Teacher Setup Overlay -->
+        <div id="setup-overlay" class="overlay">
+            <div class="panel text-left w-[95%] max-w-4xl">
+                <div class="flex items-center gap-4 mb-6 pb-4 border-b-4 border-gray-100">
+                    <span class="text-4xl">👩‍🏫</span>
+                    <h2 class="text-3xl font-bold text-blue-600">ตั้งค่าห้องเรียนนินจา</h2>
+                </div>
+                
+                <div class="mb-8">
+                    <h3 class="text-xl font-bold text-gray-700 mb-4 bg-yellow-100 inline-block px-4 py-1 rounded-full">1. เลือกหัวข้อการเรียนรู้</h3>
+                    <div class="mode-grid" id="topic-grid">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                    <div class="bg-gray-50 p-6 rounded-3xl border-2 border-gray-200">
+                        <h3 class="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
+                            <span>🌟</span> 2. ระดับความยาก
+                        </h3>
+                        <div class="flex flex-col gap-3">
+                            <label class="flex items-center gap-3 cursor-pointer p-2 rounded-xl hover:bg-green-100 transition">
+                                <input type="radio" name="difficulty" value="easy" class="w-6 h-6 accent-green-500"> 
+                                <span class="text-lg font-bold text-green-600">ง่าย</span> <span class="text-gray-500 text-sm">(ช้า, เป้าหมายใหญ่)</span>
+                            </label>
+                            <label class="flex items-center gap-3 cursor-pointer p-2 rounded-xl hover:bg-yellow-100 transition bg-yellow-50">
+                                <input type="radio" name="difficulty" value="medium" checked class="w-6 h-6 accent-yellow-500"> 
+                                <span class="text-lg font-bold text-yellow-600">ปานกลาง</span> <span class="text-gray-500 text-sm">(มาตรฐาน)</span>
+                            </label>
+                            <label class="flex items-center gap-3 cursor-pointer p-2 rounded-xl hover:bg-red-100 transition">
+                                <input type="radio" name="difficulty" value="hard" class="w-6 h-6 accent-red-500"> 
+                                <span class="text-lg font-bold text-red-600">ยาก</span> <span class="text-gray-500 text-sm">(เร็ว, มีสิ่งหลอกเยอะ)</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-6 rounded-3xl border-2 border-gray-200">
+                        <h3 class="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
+                            <span>⚙️</span> 3. ตัวเลือกเพิ่มเติม
+                        </h3>
+                        <div class="flex flex-col gap-4">
+                            <label class="flex items-center gap-3 cursor-pointer p-2 rounded-xl bg-white border border-gray-200">
+                                <input type="checkbox" id="opt-bombs" checked class="w-6 h-6 accent-purple-500"> 
+                                <div>
+                                    <div class="font-bold text-purple-600">เพิ่มระเบิดไวรัส 🦠</div>
+                                    <div class="text-sm text-gray-500">สร้างความท้าทาย ห้ามฟันโดน!</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-between mt-8 pt-6 border-t-4 border-gray-100">
+                    <button id="btn-back-menu" class="btn btn-secondary">◀ กลับเมนูหลัก</button>
+                    <button id="btn-start-custom" class="btn">เริ่มการเรียนรู้! ▶</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Result Overlay -->
+        <div id="result-overlay" class="overlay">
+            <div class="panel w-full max-w-3xl">
+                <div class="absolute -top-16 left-1/2 transform -translate-x-1/2 text-8xl">🏆</div>
+                <h2 id="result-title" class="text-5xl font-bold text-green-500 mt-8 mb-2 drop-shadow-md">ภารกิจสำเร็จ!</h2>
+                
+                <div class="flex justify-center items-center gap-4 mb-6">
+                    <span class="text-2xl text-gray-600 font-bold">ระดับนินจา:</span>
+                    <span id="result-rank" class="text-5xl font-black text-yellow-400 drop-shadow-md">S</span>
+                </div>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 w-full mb-8">
+                    <div class="stat-card">
+                        <span class="label">คะแนนรวม</span>
+                        <span id="res-score" class="value text-blue-500">0</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label">ความแม่นยำ</span>
+                        <span id="res-acc" class="value text-green-500">0%</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label">คอมโบสูงสุด</span>
+                        <span id="res-combo" class="value text-purple-500">x0</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label">ฟันถูกทั้งหมด</span>
+                        <span id="res-correct" class="value text-pink-500">0</span>
+                    </div>
+                </div>
+
+                <div class="bg-yellow-50 w-full p-6 rounded-3xl mb-8 border-4 border-yellow-200">
+                    <h3 class="text-yellow-600 font-bold mb-4 text-xl">🎁 ของรางวัลนินจาวิทย์</h3>
+                    <div class="flex justify-center gap-8 text-3xl font-bold">
+                        <span class="flex items-center gap-2 text-yellow-500"><span id="res-stars">0</span> ⭐</span>
+                        <span class="flex items-center gap-2 text-green-500"><span id="res-leaves">0</span> 🍃</span>
+                        <span class="flex items-center gap-2 text-orange-500"><span id="res-coins">0</span> 🪙</span>
+                    </div>
+                </div>
+
+                <div class="flex justify-center gap-6">
+                    <button id="btn-play-again" class="btn text-xl">🔄 เล่นอีกครั้ง</button>
+                    <button id="btn-result-menu" class="btn btn-secondary text-xl">🏠 เมนูหลัก</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- 1. GAME DATA & CURRICULUM (Science DB - Thai Primary School) ---
+        const CATEGORIES = {
+            LIVING: 'สิ่งมีชีวิต',
+            NON_LIVING: 'สิ่งไม่มีชีวิต',
+            PLANT: 'พืช',
+            ANIMAL: 'สัตว์',
+            VERTEBRATE: 'สัตว์มีกระดูกสันหลัง',
+            INVERTEBRATE: 'สัตว์ไม่มีกระดูกสันหลัง',
+            PRODUCER: 'ผู้ผลิต (พืช)',
+            HERBIVORE: 'สัตว์กินพืช',
+            CARNIVORE: 'สัตว์กินเนื้อ'
+        };
+
+        // Enhanced Cute Database
+        const SCIENCE_DB = [
+            // Animals (Living, Animal, Vertebrate)
+            { id: 'dog', name: 'น้องหมา', cat: [CATEGORIES.LIVING, CATEGORIES.ANIMAL, CATEGORIES.VERTEBRATE, CATEGORIES.CARNIVORE], color: '#FCD34D', shape: 'dog', emoji: '🐶' },
+            { id: 'cat', name: 'น้องแมว', cat: [CATEGORIES.LIVING, CATEGORIES.ANIMAL, CATEGORIES.VERTEBRATE, CATEGORIES.CARNIVORE], color: '#F97316', shape: 'cat', emoji: '🐱' },
+            { id: 'whale', name: 'พี่วาฬ', cat: [CATEGORIES.LIVING, CATEGORIES.ANIMAL, CATEGORIES.VERTEBRATE, CATEGORIES.CARNIVORE], color: '#60A5FA', shape: 'whale', emoji: '🐳' },
+            { id: 'bird', name: 'นกน้อย', cat: [CATEGORIES.LIVING, CATEGORIES.ANIMAL, CATEGORIES.VERTEBRATE, CATEGORIES.HERBIVORE], color: '#F43F5E', shape: 'bird', emoji: '🐦' },
+            { id: 'fish', name: 'ปลาทอง', cat: [CATEGORIES.LIVING, CATEGORIES.ANIMAL, CATEGORIES.VERTEBRATE, CATEGORIES.CARNIVORE], color: '#F59E0B', shape: 'fish', emoji: '🐠' },
+            { id: 'rabbit', name: 'กระต่าย', cat: [CATEGORIES.LIVING, CATEGORIES.ANIMAL, CATEGORIES.VERTEBRATE, CATEGORIES.HERBIVORE], color: '#FFFFFF', shape: 'rabbit', emoji: '🐰' },
+            
+            // Invertebrates
+            { id: 'butterfly', name: 'ผีเสื้อ', cat: [CATEGORIES.LIVING, CATEGORIES.ANIMAL, CATEGORIES.INVERTEBRATE, CATEGORIES.HERBIVORE], color: '#D946EF', shape: 'butterfly', emoji: '🦋' },
+            { id: 'worm', name: 'หนอนดุ๊กดิ๊ก', cat: [CATEGORIES.LIVING, CATEGORIES.ANIMAL, CATEGORIES.INVERTEBRATE], color: '#A3E635', shape: 'worm', emoji: '🐛' },
+
+            // Plants (Living, Plant, Producer)
+            { id: 'tree', name: 'ต้นไม้ใหญ่', cat: [CATEGORIES.LIVING, CATEGORIES.PLANT, CATEGORIES.PRODUCER], color: '#22C55E', shape: 'tree', emoji: '🌳' },
+            { id: 'flower', name: 'ดอกไม้', cat: [CATEGORIES.LIVING, CATEGORIES.PLANT, CATEGORIES.PRODUCER], color: '#EC4899', shape: 'flower', emoji: '🌸' },
+            { id: 'grass', name: 'ต้นหญ้า', cat: [CATEGORIES.LIVING, CATEGORIES.PLANT, CATEGORIES.PRODUCER], color: '#84CC16', shape: 'grass', emoji: '🌿' },
+            
+            // Non-Living
+            { id: 'rock', name: 'ก้อนหิน', cat: [CATEGORIES.NON_LIVING], color: '#9CA3AF', shape: 'rock', emoji: '🪨' },
+            { id: 'cloud', name: 'ก้อนเมฆ', cat: [CATEGORIES.NON_LIVING], color: '#FFFFFF', shape: 'cloud', emoji: '☁️' },
+            { id: 'sun', name: 'ดวงอาทิตย์', cat: [CATEGORIES.NON_LIVING], color: '#FEF08A', shape: 'sun', emoji: '☀️' },
+            { id: 'water', name: 'หยดน้ำ', cat: [CATEGORIES.NON_LIVING], color: '#38BDF8', shape: 'drop', emoji: '💧' },
+            { id: 'robot', name: 'หุ่นยนต์', cat: [CATEGORIES.NON_LIVING], color: '#CBD5E1', shape: 'robot', emoji: '🤖' }
+        ];
+
+        // Game Modes localized and kid-friendly
+        const GAME_MODES = [
+            { id: 'living_vs_non', title: 'แยกสิ่งมีชีวิต', objective: 'ฟันเฉพาะ สิ่งมีชีวิต 🐶🌳', targetCategory: CATEGORIES.LIVING, color: '#10B981' },
+            { id: 'plants_only', title: 'อาณาจักรพืช', objective: 'ฟันเฉพาะ พืช 🌸🌿', targetCategory: CATEGORIES.PLANT, color: '#22C55E' },
+            { id: 'animals_only', title: 'อาณาจักรสัตว์', objective: 'ฟันเฉพาะ สัตว์ 🐱🦋', targetCategory: CATEGORIES.ANIMAL, color: '#F59E0B' },
+            { id: 'vertebrates', title: 'มีกระดูกสันหลัง', objective: 'ฟันเฉพาะ สัตว์มีกระดูกสันหลัง 🐟', targetCategory: CATEGORIES.VERTEBRATE, color: '#3B82F6' },
+            { id: 'invertebrates', title: 'ไม่มีกระดูกสันหลัง', objective: 'ฟันเฉพาะ สัตว์ไม่มีกระดูกสันหลัง 🐛', targetCategory: CATEGORIES.INVERTEBRATE, color: '#8B5CF6' }
+        ];
+
+        const STATE = {
+            mode: 'MENU',
+            currentTopic: GAME_MODES[0],
+            difficulty: 'medium',
+            score: 0,
+            lives: 3,
+            combo: 0,
+            maxCombo: 0,
+            correctHits: 0,
+            totalHits: 0,
+            width: window.innerWidth,
+            height: window.innerHeight,
+            cameraActive: false,
+            lastTime: 0
+        };
+
+        const MathUtils = {
+            randomRange: (min, max) => Math.random() * (max - min) + min,
+            dist: (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1),
+            lineIntersectsCircle: (A, B, C, R) => {
+                let dx = B.x - A.x;
+                let dy = B.y - A.y;
+                let len2 = dx * dx + dy * dy;
+                if (len2 === 0) return MathUtils.dist(A.x, A.y, C.x, C.y) < R;
+                let t = ((C.x - A.x) * dx + (C.y - A.y) * dy) / len2;
+                t = Math.max(0, Math.min(1, t));
+                let closestX = A.x + t * dx;
+                let closestY = A.y + t * dy;
+                return MathUtils.dist(closestX, closestY, C.x, C.y) < R;
+            }
+        };
+
+        class AudioEngine {
+            constructor() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.gain.value = 0.4;
+                this.masterGain.connect(this.ctx.destination);
+                this.enabled = true;
+            }
+
+            playTone(freq, type, duration, vol = 1, slideTo = null) {
+                if (!this.enabled || this.ctx.state === 'suspended') return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                if(slideTo) {
+                    osc.frequency.exponentialRampToValueAtTime(slideTo, this.ctx.currentTime + duration);
+                }
+                
+                gain.gain.setValueAtTime(0, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(vol, this.ctx.currentTime + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+                
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            }
+
+            playSlash() {
+                // High pitched swoosh
+                this.playTone(800, 'sine', 0.15, 0.3, 400);
+            }
+
+            playCorrect() {
+                // Cute magical chime
+                this.playTone(523.25, 'sine', 0.1, 0.4); // C5
+                setTimeout(() => this.playTone(659.25, 'sine', 0.1, 0.4), 80); // E5
+                setTimeout(() => this.playTone(783.99, 'sine', 0.3, 0.5), 160); // G5
+            }
+
+            playWrong() {
+                // Soft bonk
+                this.playTone(200, 'square', 0.2, 0.4, 100);
+            }
+
+            playExplosion() {
+                // Noise burst for virus
+                if (!this.enabled || this.ctx.state === 'suspended') return;
+                const bufferSize = this.ctx.sampleRate * 0.3;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(800, this.ctx.currentTime);
+                filter.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.3);
+                
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.8, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.masterGain);
+                noise.start();
+            }
+        }
+        const audio = new AudioEngine();
+
+        const DrawUtils = {
+            drawEmoji: (ctx, emoji, size) => {
+                ctx.font = `${size * 1.5}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                // Slight shadow for depth
+                ctx.shadowColor = 'rgba(0,0,0,0.2)';
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetY = 5;
+                ctx.fillText(emoji, 0, 0);
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetY = 0;
+            },
+
+            drawVirus: (ctx, size) => {
+                // Cute but evil virus (Bomb alternative)
+                ctx.fillStyle = '#8B5CF6'; // Purple
+                ctx.beginPath();
+                ctx.arc(0, 0, size * 0.8, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Spikes
+                ctx.fillStyle = '#C084FC';
+                for(let i=0; i<8; i++) {
+                    let angle = (i / 8) * Math.PI * 2;
+                    let px = Math.cos(angle) * size * 0.8;
+                    let py = Math.sin(angle) * size * 0.8;
+                    ctx.beginPath();
+                    ctx.arc(px, py, size * 0.25, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Angry Face
+                ctx.fillStyle = '#FFF';
+                // Eyes
+                ctx.beginPath(); ctx.ellipse(-size*0.3, -size*0.2, size*0.15, size*0.2, -0.3, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(size*0.3, -size*0.2, size*0.15, size*0.2, 0.3, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath(); ctx.arc(-size*0.25, -size*0.2, size*0.08, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(size*0.25, -size*0.2, size*0.08, 0, Math.PI*2); ctx.fill();
+                // Mouth
+                ctx.beginPath();
+                ctx.moveTo(-size*0.2, size*0.3);
+                ctx.quadraticCurveTo(0, size*0.1, size*0.2, size*0.3);
+                ctx.lineWidth = size*0.08;
+                ctx.strokeStyle = '#000';
+                ctx.stroke();
+            },
+
+            drawEntity: (ctx, entity, x, y, size, rotation) => {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(rotation);
+                
+                if (entity.isVirus) {
+                    DrawUtils.drawVirus(ctx, size);
+                } else if (entity.data && entity.data.emoji) {
+                    // Use Emoji for super cute, recognizable graphics for kids
+                    DrawUtils.drawEmoji(ctx, entity.data.emoji, size);
+                } else {
+                    // Fallback bubble
+                    ctx.fillStyle = entity.color || '#DDD';
+                    ctx.beginPath(); ctx.arc(0, 0, size, 0, Math.PI * 2); ctx.fill();
+                }
+                
+                ctx.restore();
+            }
+        };
+
+        class Particle {
+            constructor(x, y, color, speed, life, size, emoji=null) {
+                this.x = x; this.y = y;
+                let angle = Math.random() * Math.PI * 2;
+                let vel = Math.random() * speed;
+                this.vx = Math.cos(angle) * vel;
+                this.vy = Math.sin(angle) * vel;
+                this.color = color;
+                this.life = life;
+                this.maxLife = life;
+                this.size = size;
+                this.gravity = 0.15;
+                this.emoji = emoji; // Optional emoji particle (e.g. stars)
+                this.rot = Math.random() * Math.PI;
+                this.rotSpeed = (Math.random() - 0.5) * 0.2;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += this.gravity;
+                this.rot += this.rotSpeed;
+                this.life--;
+            }
+            draw(ctx) {
+                const alpha = this.life / this.maxLife;
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rot);
+                
+                if(this.emoji) {
+                    ctx.font = `${this.size}px Arial`;
+                    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    ctx.fillText(this.emoji, 0, 0);
+                } else {
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+        }
+
+        class Throwable {
+            constructor(data, isVirus = false) {
+                this.reset(data, isVirus);
+            }
+
+            reset(data, isVirus) {
+                this.data = data;
+                this.isVirus = isVirus;
+                this.active = true;
+                this.sliced = false;
+                // Bigger targets for kids
+                this.size = isVirus ? 45 : MathUtils.randomRange(55, 75);
+                
+                this.x = MathUtils.randomRange(this.size * 2, STATE.width - this.size * 2);
+                this.y = STATE.height + this.size;
+                
+                let targetX = STATE.width / 2 + (Math.random() - 0.5) * (STATE.width * 0.5);
+                
+                // Gentler physics for kids
+                let speedMult = STATE.difficulty === 'hard' ? 1.3 : (STATE.difficulty === 'easy' ? 0.8 : 1);
+                
+                this.vx = (targetX - this.x) * 0.015 * speedMult;
+                // Scale jump height based on screen height
+                let jumpPower = Math.sqrt(STATE.height) * 0.85; 
+                this.vy = -(jumpPower + MathUtils.randomRange(0, 5)) * speedMult;
+                this.gravity = 0.25 * speedMult;
+                
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotSpeed = (Math.random() - 0.5) * 0.1;
+                
+                // Sparkle trail
+                this.trailTimer = 0;
+            }
+
+            update() {
+                if (!this.active) return;
+                
+                if (!this.sliced) {
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    this.vy += this.gravity;
+                    this.rotation += this.rotSpeed;
+
+                    // Emit cute trail particles
+                    this.trailTimer++;
+                    if(this.trailTimer > 3 && !this.isVirus && STATE.mode === 'PLAYING') {
+                        gameEngine.particles.push(new Particle(
+                            this.x, this.y, '#FFF', 2, 20, 5, '✨'
+                        ));
+                        this.trailTimer = 0;
+                    }
+
+                    if (this.y > STATE.height + this.size + 100) {
+                        this.active = false;
+                        if (!this.isVirus && this.isTarget()) {
+                            gameEngine.breakCombo();
+                        }
+                    }
+                } else {
+                    // Sliced animation (fall apart)
+                    this.half1.x += this.half1.vx; this.half1.y += this.half1.vy;
+                    this.half1.vy += this.gravity; this.half1.rot += this.half1.rotSpeed;
+                    
+                    this.half2.x += this.half2.vx; this.half2.y += this.half2.vy;
+                    this.half2.vy += this.gravity; this.half2.rot += this.half2.rotSpeed;
+
+                    this.sliceLife--;
+                    if (this.sliceLife <= 0) this.active = false;
+                }
+            }
+
+            draw(ctx) {
+                if (!this.active) return;
+
+                if (!this.sliced) {
+                    // Draw soft glow behind object
+                    ctx.save();
+                    ctx.shadowColor = this.isVirus ? '#8B5CF6' : '#FFF';
+                    ctx.shadowBlur = 15;
+                    DrawUtils.drawEntity(ctx, this, this.x, this.y, this.size, this.rotation);
+                    ctx.restore();
+                } else {
+                    // Draw sliced halves
+                    ctx.save();
+                    ctx.globalAlpha = this.sliceLife / 40;
+                    
+                    // Half 1
+                    ctx.save();
+                    ctx.translate(this.half1.x, this.half1.y); ctx.rotate(this.half1.rot);
+                    ctx.beginPath(); ctx.rect(-this.size*1.5, -this.size*1.5, this.size*3, this.size*1.5); ctx.clip();
+                    DrawUtils.drawEntity(ctx, this, 0, 0, this.size, 0);
+                    ctx.restore();
+                    
+                    // Half 2
+                    ctx.save();
+                    ctx.translate(this.half2.x, this.half2.y); ctx.rotate(this.half2.rot);
+                    ctx.beginPath(); ctx.rect(-this.size*1.5, 0, this.size*3, this.size*1.5); ctx.clip();
+                    DrawUtils.drawEntity(ctx, this, 0, 0, this.size, 0);
+                    ctx.restore();
+
+                    ctx.restore();
+                }
+            }
+
+            slice(vx, vy) {
+                if (this.sliced) return;
+                this.sliced = true;
+                this.sliceLife = 40;
+                
+                let magnitude = Math.hypot(vx, vy);
+                let dirX = vx / (magnitude || 1);
+                let dirY = vy / (magnitude || 1);
+
+                this.half1 = {
+                    x: this.x, y: this.y,
+                    vx: this.vx - dirY * 4, vy: this.vy + dirX * 4,
+                    rot: this.rotation, rotSpeed: -0.1
+                };
+                
+                this.half2 = {
+                    x: this.x, y: this.y,
+                    vx: this.vx + dirY * 4, vy: this.vy - dirX * 4,
+                    rot: this.rotation, rotSpeed: 0.1
+                };
+
+                // Generate Juice (Particles)
+                if (this.isVirus) {
+                    audio.playExplosion();
+                    gameEngine.takeDamage();
+                    gameEngine.showFloatingText("ไวรัสอันตราย! 🦠", this.x, this.y, '#EF4444');
+                    // Poison particles
+                    for(let i=0; i<15; i++) gameEngine.particles.push(new Particle(this.x, this.y, '#8B5CF6', 8, 40, Math.random() * 10 + 5));
+                } else if (this.isTarget()) {
+                    audio.playCorrect();
+                    gameEngine.addScore(10, this.x, this.y);
+                    gameEngine.showFloatingText(`ถูกต้อง! ${this.data.name}`, this.x, this.y - 40, '#10B981');
+                    // Star particles
+                    for(let i=0; i<8; i++) gameEngine.particles.push(new Particle(this.x, this.y, '', 6, 40, 15, '⭐'));
+                } else {
+                    audio.playWrong();
+                    gameEngine.breakCombo();
+                    gameEngine.takeDamage();
+                    gameEngine.showFloatingText("ผิดหมวดหมู่! ❌", this.x, this.y, '#EF4444');
+                    for(let i=0; i<10; i++) gameEngine.particles.push(new Particle(this.x, this.y, '#9CA3AF', 5, 30, Math.random() * 8 + 3));
+                }
+            }
+
+            isTarget() {
+                if(this.isVirus) return false;
+                return this.data.cat.includes(STATE.currentTopic.targetCategory);
+            }
+        }
+
+        class GameEngine {
+            constructor() {
+                this.gameCanvas = document.getElementById('game-canvas');
+                this.gameCtx = this.gameCanvas.getContext('2d');
+                this.uiCanvas = document.getElementById('ui-canvas');
+                this.uiCtx = this.uiCanvas.getContext('2d');
+                
+                // Video canvas for drawing raw camera feed
+                this.videoCanvas = document.getElementById('video-canvas');
+                this.videoCtx = this.videoCanvas.getContext('2d');
+                this.videoElement = document.getElementById('webcam');
+                
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+
+                this.entities = [];
+                this.particles = [];
+                this.floatingTexts = [];
+                this.slashes = []; 
+                
+                this.lastSpawnTime = 0;
+                this.spawnRate = 2000;
+
+                this.hands = [];
+                this.prevHands = [];
+
+                this.loop = this.loop.bind(this);
+                requestAnimationFrame(this.loop);
+            }
+
+            resize() {
+                STATE.width = window.innerWidth;
+                STATE.height = window.innerHeight;
+                this.gameCanvas.width = STATE.width; this.gameCanvas.height = STATE.height;
+                this.uiCanvas.width = STATE.width; this.uiCanvas.height = STATE.height;
+                this.videoCanvas.width = STATE.width; this.videoCanvas.height = STATE.height;
+            }
+
+            startGame(topic, difficulty, useBombs) {
+                STATE.currentTopic = topic;
+                STATE.difficulty = difficulty;
+                this.useBombs = useBombs;
+                
+                STATE.mode = 'PLAYING';
+                STATE.score = 0;
+                STATE.lives = 3;
+                STATE.combo = 0;
+                STATE.maxCombo = 0;
+                STATE.correctHits = 0;
+                STATE.totalHits = 0;
+                
+                this.entities = [];
+                this.particles = [];
+                this.floatingTexts = [];
+                
+                this.updateHUD();
+                
+                // Setup objective HUD styling
+                const objEl = document.getElementById('hud-objective');
+                const objText = document.getElementById('obj-text');
+                objText.innerText = topic.objective;
+                objEl.style.borderColor = topic.color;
+                objText.style.color = topic.color;
+                
+                document.getElementById('hud-top-bar').style.display = 'flex';
+                objEl.style.display = 'block';
+                
+                this.spawnRate = difficulty === 'hard' ? 1200 : (difficulty === 'easy' ? 2500 : 1800);
+                
+                UIUtils.hideAllOverlays();
+                if(audio.ctx.state === 'suspended') audio.ctx.resume();
+            }
+
+            spawnEntity() {
+                let isVirus = this.useBombs && Math.random() < (STATE.difficulty === 'hard' ? 0.25 : 0.15);
+                let data = null;
+                
+                if (!isVirus) {
+                    // 65% chance to spawn correct target to keep kids encouraged
+                    let wantTarget = Math.random() < 0.65;
+                    let possible = SCIENCE_DB.filter(item => 
+                        wantTarget ? item.cat.includes(STATE.currentTopic.targetCategory) 
+                                   : !item.cat.includes(STATE.currentTopic.targetCategory)
+                    );
+                    if (possible.length === 0) possible = SCIENCE_DB; 
+                    data = possible[Math.floor(Math.random() * possible.length)];
+                }
+
+                let entity = this.entities.find(e => !e.active);
+                if (entity) entity.reset(data, isVirus);
+                else this.entities.push(new Throwable(data, isVirus));
+            }
+
+            updateHands(results) {
+                if (!results.multiHandLandmarks) return;
+                
+                this.prevHands = JSON.parse(JSON.stringify(this.hands));
+                this.hands = [];
+
+                for (const landmarks of results.multiHandLandmarks) {
+                    const indexTip = landmarks[8]; // Index finger tip
+                    let px = (1 - indexTip.x) * STATE.width; // Flip X for mirror
+                    let py = indexTip.y * STATE.height;
+                    
+                    this.hands.push({x: px, y: py});
+                    this.slashes.push({x: px, y: py, life: 12, maxLife: 12});
+                }
+                this.checkCollisions();
+            }
+
+            checkCollisions() {
+                if (STATE.mode !== 'PLAYING') return;
+
+                for (let i = 0; i < this.hands.length; i++) {
+                    const curr = this.hands[i];
+                    const prev = this.prevHands[i] || curr;
+
+                    const vx = curr.x - prev.x;
+                    const vy = curr.y - prev.y;
+                    const speed = Math.hypot(vx, vy);
+
+                    // Slower slice threshold for kids
+                    if (speed > 15) {
+                        for (let entity of this.entities) {
+                            if (!entity.active || entity.sliced) continue;
+                            
+                            // Increase hitbox slightly for easier gameplay for kids
+                            let hitRadius = entity.size * 1.2; 
+                            let hit = MathUtils.lineIntersectsCircle(prev, curr, {x: entity.x, y: entity.y}, hitRadius);
+                            
+                            if (hit) {
+                                STATE.totalHits++;
+                                entity.slice(vx, vy);
+                                audio.playSlash();
+                            }
+                        }
+                    }
+                }
+            }
+
+            addScore(basePoints, x, y) {
+                STATE.correctHits++;
+                STATE.combo++;
+                if(STATE.combo > STATE.maxCombo) STATE.maxCombo = STATE.combo;
+                
+                let multiplier = 1;
+                if(STATE.combo >= 10) multiplier = 3;
+                else if(STATE.combo >= 5) multiplier = 2;
+
+                let points = basePoints * multiplier;
+                STATE.score += points;
+                
+                if(multiplier > 1) {
+                    this.showFloatingText(`คอมโบ x${multiplier}! 🔥`, x, y - 70, '#F59E0B');
+                    UIUtils.triggerComboEffect();
+                }
+                
+                this.updateHUD();
+            }
+
+            breakCombo() {
+                STATE.combo = 0;
+                this.updateHUD();
+            }
+
+            takeDamage() {
+                STATE.lives--;
+                this.updateHUD();
+                
+                // Red screen flash effect on ui canvas
+                this.uiCtx.fillStyle = 'rgba(239, 68, 68, 0.3)';
+                this.uiCtx.fillRect(0, 0, STATE.width, STATE.height);
+
+                if (STATE.lives <= 0) this.endGame();
+            }
+
+            showFloatingText(text, x, y, color) {
+                this.floatingTexts.push({
+                    text: text, x: x, y: y, color: color, life: 60, maxLife: 60, vy: -1.5
+                });
+            }
+
+            updateHUD() {
+                document.getElementById('score-val').innerText = STATE.score;
+                document.getElementById('combo-val').innerText = STATE.combo;
+                
+                let livesHtml = '';
+                for(let i=0; i<3; i++) {
+                    livesHtml += i < STATE.lives ? '<span class="heart">❤️</span>' : '<span class="heart" style="filter:grayscale(1); opacity:0.5">🖤</span>';
+                }
+                document.getElementById('hud-lives').innerHTML = livesHtml;
+            }
+
+            endGame() {
+                STATE.mode = 'RESULT';
+                document.getElementById('hud-top-bar').style.display = 'none';
+                document.getElementById('hud-objective').style.display = 'none';
+                UIUtils.showResultScreen();
+            }
+
+            loop(timestamp) {
+                let dt = timestamp - STATE.lastTime;
+                STATE.lastTime = timestamp;
+
+                this.gameCtx.clearRect(0, 0, STATE.width, STATE.height);
+                this.uiCtx.clearRect(0, 0, STATE.width, STATE.height);
+                
+                // Draw camera feed to video canvas continuously if active
+                if (STATE.cameraActive && this.videoElement.readyState === this.videoElement.HAVE_ENOUGH_DATA) {
+                    // Draw with mirror effect via CSS transform on canvas, just draw rect here
+                    this.videoCtx.drawImage(this.videoElement, 0, 0, STATE.width, STATE.height);
+                }
+
+                if (STATE.mode === 'PLAYING') {
+                    if (timestamp - this.lastSpawnTime > this.spawnRate) {
+                        let count = STATE.difficulty === 'hard' ? Math.floor(Math.random()*2)+1 : 1;
+                        for(let i=0; i<count; i++) {
+                            setTimeout(() => this.spawnEntity(), i * 400);
+                        }
+                        this.lastSpawnTime = timestamp;
+                    }
+
+                    for (let entity of this.entities) {
+                        entity.update();
+                        entity.draw(this.gameCtx);
+                    }
+
+                    for (let i = this.particles.length - 1; i >= 0; i--) {
+                        let p = this.particles[i];
+                        p.update();
+                        p.draw(this.gameCtx);
+                        if (p.life <= 0) this.particles.splice(i, 1);
+                    }
+                }
+
+                // Draw Magic Blade (Slashes)
+                if (this.slashes.length > 0) {
+                    this.gameCtx.save();
+                    this.gameCtx.lineCap = 'round';
+                    this.gameCtx.lineJoin = 'round';
+                    
+                    // Outer glow
+                    this.gameCtx.shadowColor = '#60A5FA';
+                    this.gameCtx.shadowBlur = 20;
+                    
+                    this.gameCtx.beginPath();
+                    for (let i = 0; i < this.slashes.length; i++) {
+                        let s = this.slashes[i];
+                        let w = (s.life / s.maxLife) * 20;
+                        
+                        // Inner bright core
+                        this.gameCtx.fillStyle = `rgba(255, 255, 255, ${s.life/s.maxLife})`;
+                        this.gameCtx.moveTo(s.x, s.y);
+                        this.gameCtx.arc(s.x, s.y, w/2, 0, Math.PI*2);
+                        
+                        s.life--;
+                    }
+                    this.gameCtx.fill();
+                    
+                    // Draw connecting lines for continuous swipe look
+                    if(this.slashes.length > 1) {
+                        this.gameCtx.beginPath();
+                        this.gameCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                        this.gameCtx.lineWidth = 8;
+                        this.gameCtx.moveTo(this.slashes[0].x, this.slashes[0].y);
+                        for(let i=1; i<this.slashes.length; i++){
+                            if(MathUtils.dist(this.slashes[i-1].x, this.slashes[i-1].y, this.slashes[i].x, this.slashes[i].y) < 100) {
+                                this.gameCtx.lineTo(this.slashes[i].x, this.slashes[i].y);
+                            } else {
+                                this.gameCtx.moveTo(this.slashes[i].x, this.slashes[i].y); // break line if hand teleported
+                            }
+                        }
+                        this.gameCtx.stroke();
+                    }
+
+                    this.gameCtx.restore();
+                    this.slashes = this.slashes.filter(s => s.life > 0);
+                }
+
+                // Draw Floating UI Text
+                for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+                    let ft = this.floatingTexts[i];
+                    ft.y += ft.vy;
+                    ft.life--;
+                    
+                    this.uiCtx.save();
+                    this.uiCtx.globalAlpha = ft.life / ft.maxLife;
+                    this.uiCtx.fillStyle = ft.color;
+                    this.uiCtx.font = '900 28px Kanit';
+                    this.uiCtx.textAlign = 'center';
+                    // Un-mirror X coordinate for text readability
+                    let displayX = STATE.width - ft.x; 
+                    
+                    // Cute thick white stroke for readability
+                    this.uiCtx.strokeStyle = '#FFF';
+                    this.uiCtx.lineWidth = 6;
+                    this.uiCtx.strokeText(ft.text, displayX, ft.y);
+                    this.uiCtx.fillText(ft.text, displayX, ft.y);
+                    this.uiCtx.restore();
+
+                    if (ft.life <= 0) this.floatingTexts.splice(i, 1);
+                }
+
+                requestAnimationFrame(this.loop);
+            }
+        }
+
+        let gameEngine = null;
+
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 1280, height: 720, facingMode: "user" } 
+                });
+                gameEngine.videoElement.srcObject = stream;
+                
+                return new Promise((resolve) => {
+                    gameEngine.videoElement.onloadedmetadata = () => {
+                        gameEngine.videoElement.play();
+                        STATE.cameraActive = true;
+                        resolve();
+                    };
+                });
+            } catch (err) {
+                alert("ต้องเปิดกล้องก่อนน้า ถึงจะเล่นเป็นนินจาได้! (กรุณาอนุญาตการเข้าถึงกล้อง)");
+                throw err;
+            }
+        }
+
+        async function initMediaPipe() {
+            const hands = new window.Hands({locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }});
+            
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1, 
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            hands.onResults((results) => {
+                if (gameEngine) gameEngine.updateHands(results);
+            });
+
+            const camera = new window.Camera(gameEngine.videoElement, {
+                onFrame: async () => {
+                    if (STATE.mode === 'PLAYING') {
+                        await hands.send({image: gameEngine.videoElement});
+                    }
+                },
+                width: 1280,
+                height: 720
+            });
+            
+            camera.start();
+            
+            // Update UI once loaded
+            document.getElementById('loading-container').style.display = 'none';
+            const playBtn = document.getElementById('btn-quick-play');
+            playBtn.disabled = false;
+            document.getElementById('btn-play-text').innerHTML = "▶ เริ่มเล่นเลย!";
+            playBtn.classList.add('animate-pulse'); // Draw attention
+        }
+
+        const UIUtils = {
+            hideAllOverlays: () => {
+                document.querySelectorAll('.overlay').forEach(el => el.classList.remove('active'));
+            },
+            showMenu: () => {
+                UIUtils.hideAllOverlays();
+                document.getElementById('menu-overlay').classList.add('active');
+                STATE.mode = 'MENU';
+            },
+            showTeacherSetup: () => {
+                UIUtils.hideAllOverlays();
+                document.getElementById('setup-overlay').classList.add('active');
+            },
+            showResultScreen: () => {
+                UIUtils.hideAllOverlays();
+                const res = document.getElementById('result-overlay');
+                res.classList.add('active');
+                
+                let acc = STATE.totalHits > 0 ? Math.round((STATE.correctHits / STATE.totalHits) * 100) : 0;
+                
+                // Cute Ranks
+                let rank = 'เริ่มฝึกหัด';
+                let rankColor = 'text-gray-400';
+                if(acc > 90 && STATE.score > 500) { rank = 'ปรมาจารย์ 👑'; rankColor = 'text-yellow-400'; }
+                else if(acc > 70) { rank = 'ยอดนินจา ⭐'; rankColor = 'text-green-500'; }
+                else if(acc > 50) { rank = 'ศิษย์เอก 🌟'; rankColor = 'text-blue-500'; }
+
+                // Animation counters
+                UIUtils.animateValue('res-score', 0, STATE.score, 1000);
+                UIUtils.animateValue('res-acc', 0, acc, 1000, '%');
+                UIUtils.animateValue('res-combo', 0, STATE.maxCombo, 1000, 'x');
+                document.getElementById('res-correct').innerText = STATE.correctHits;
+                
+                const rankEl = document.getElementById('result-rank');
+                rankEl.innerText = rank;
+                rankEl.className = `text-4xl md:text-5xl font-black drop-shadow-md ${rankColor}`;
+
+                // Rewards
+                document.getElementById('res-stars').innerText = Math.floor(STATE.score / 100);
+                document.getElementById('res-leaves').innerText = STATE.correctHits * 2;
+                document.getElementById('res-coins').innerText = Math.floor(STATE.maxCombo * 5);
+            },
+            animateValue: (id, start, end, duration, suffix='') => {
+                let current = start;
+                const range = end - start;
+                const increment = end > start ? 1 : -1;
+                const stepTime = Math.abs(Math.floor(duration / (range || 1)));
+                const obj = document.getElementById(id);
+                if(range === 0) { obj.innerText = end + suffix; return; }
+                const timer = setInterval(() => {
+                    current += increment;
+                    obj.innerText = current + suffix;
+                    if (current == end) clearInterval(timer);
+                }, stepTime);
+            },
+            triggerComboEffect: () => {
+                const el = document.getElementById('hud-combo');
+                el.classList.add('active');
+                setTimeout(() => el.classList.remove('active'), 400);
+            },
+            populateTopics: () => {
+                const grid = document.getElementById('topic-grid');
+                grid.innerHTML = '';
+                GAME_MODES.forEach((mode, index) => {
+                    const div = document.createElement('div');
+                    div.className = `mode-card ${index === 0 ? 'selected' : ''}`;
+                    div.innerHTML = `<div class="font-bold text-lg mb-1" style="color:${mode.color}">${mode.title}</div><div class="text-sm text-gray-500">${mode.objective}</div>`;
+                    div.onclick = () => {
+                        document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+                        div.classList.add('selected');
+                        STATE.currentTopic = mode;
+                    };
+                    grid.appendChild(div);
+                });
+            }
+        };
+
+        // Events
+        document.getElementById('btn-quick-play').addEventListener('click', async () => {
+            if(!STATE.cameraActive) await initCamera();
+            gameEngine.startGame(GAME_MODES[0], 'medium', true); 
+        });
+
+        document.getElementById('btn-teacher-mode').addEventListener('click', () => {
+            UIUtils.populateTopics();
+            UIUtils.showTeacherSetup();
+        });
+
+        document.getElementById('btn-back-menu').addEventListener('click', UIUtils.showMenu);
+
+        document.getElementById('btn-start-custom').addEventListener('click', async () => {
+            if(!STATE.cameraActive) await initCamera();
+            const diff = document.querySelector('input[name="difficulty"]:checked').value;
+            const useBombs = document.getElementById('opt-bombs').checked;
+            gameEngine.startGame(STATE.currentTopic, diff, useBombs);
+        });
+
+        document.getElementById('btn-play-again').addEventListener('click', () => {
+            gameEngine.startGame(STATE.currentTopic, STATE.difficulty, gameEngine.useBombs);
+        });
+        
+        document.getElementById('btn-result-menu').addEventListener('click', UIUtils.showMenu);
+
+        // Boot
+        window.onload = async () => {
+            gameEngine = new GameEngine();
+            initMediaPipe().catch(e => console.error("MediaPipe Error: ", e));
+        };
+
+    </script>
+</body>
+</html>
